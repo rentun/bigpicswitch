@@ -2,11 +2,12 @@
 param ($action)
 
 # Configuration
-$configFile = Get-Content -Path settings.json | ConvertFrom-Json
-$homeAssistantURI = $configFile.homeAssistantURI
-$accessToken = $configFile.accesstoken
-$multimonitortoolPath = $configFile.multimonitortoolPath
-$retries = $configFile.retries
+$configFile = "C:\Users\ken\Scripts\bigpicswitch\settings.json"
+$config = Get-Content -Path $configFile | ConvertFrom-Json
+$homeAssistantURI = $config.homeAssistantURI
+$accessToken = $config.accesstoken
+$multimonitortoolPath = $config.multimonitortoolPath
+$retries = $config.retries
 $global:retrycounter = 0
 
 # Function to send a command to Home Assistant
