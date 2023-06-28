@@ -7,113 +7,106 @@ $config = Get-Content -Path $configFile | ConvertFrom-Json
 $homeAssistantURI = $config.homeAssistantURI
 $accessToken = $config.accesstoken
 $multimonitortoolPath = $config.multimonitortoolPath
-$retries = $config.retries
-$global:retrycounter = 0
+$tvMonitorConfig = $config.tvMonitorConfig
+$desktopMonitorConfig = $config.desktopMonitorConfig
+$PCsource = $config.PCsource
+$TVsource = $config.TVsource
 
-# Function to send a command to Home Assistant
-function SendHomeAssistantCommand{
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory=$true)]
-        [string]$command,
-
-        [Parameter(Mandatory=$false)]
-        [string]$source
-    )
-
-
-    $turnOffURI = "/api/services/media_player/turn_off"
-    $turnOnURI = "/api/services/media_player/turn_on"
-    $switchInputURI = "/api/services/media_player/select_source"
-    $checkStateURI = "/api/states/media_player.samsung_tv_2"
-    if($retryCounter -gt $retries){return "Retries Exceeded, exiting"}
- 
-    if($command -eq "turnoff"){
-        $method = "POST"
-        $apipath = $turnOffURI
-    }
-    if($command -eq "turnon"){
-        $method = "POST"
-        $apipath = $turnOnURI
-    }
-    
-    if($command -eq "checkstate"){
-        $method = "GET"
-        $apipath = $checkStateURI
-    } elseif($command -eq "switchinput"){
-        $method = "POST"
-        $apipath = $switchInputURI
-        $data = @{
-            "entity_id" = "media_player.samsung_tv_2"
-            "source" = $source
-        }
-    } else{
-        $data = @{
-            "entity_id" = "media_player.samsung_tv_2"
-        }
-    }
-
-    
-    $headers = @{
+$global:retries = $config.retries
+$global:entityID = $config.entityID
+$global:turnOffURI = "/api/services/media_player/turn_off"
+$global:turnOnURI = "/api/services/media_player/turn_on"
+$global:switchInputURI = "/api/services/media_player/select_source"
+$global:checkStateURI = "/api/states/$entityID"
+$global:header = @{
         "Authorization" = "Bearer $accessToken"
         "Content-Type" = "application/json"
     }
-    
-    $body = $data | ConvertTo-Json
-    
-    $fullURI = $homeAssistantURI + $apipath
-    Write-Host "Sending $fullURI with $headers and $body using $method"
-    if($command -eq "switchinput"){
-        Invoke-RestMethod -Uri $fullURI -Method $method -Headers $headers -Body $body
-    }
-    if($command -eq "checkstate"){
-        return Invoke-RestMethod -Uri $fullURI -Method $method -Headers $headers
-    }
-    if($command -eq "turnon"){
-        $response = SendHomeAssistantCommand -command "checkState"
-        Write-Host "command is turn on. Checking state: TV says it is $($response.state)"
-        if($response.state -eq "off"){
-            Write-Host "TV is off. resending turn on command then waiting to recheck "
-            Invoke-RestMethod -Uri $fullURI -Method $method -Headers $headers -Body $body
-            Start-Sleep -Seconds 5
-            $retryCounter++
-            SendHomeAssistantCommand -command "turnon"
-            Start-Sleep -Seconds 5
-            
+# Function to send a command to Home Assistant
+function SendHomeAssistantCommand{
+    param(
+        [Parameter(Mandatory=$true)][string]$uri, 
+        [Parameter(Mandatory=$true)][string]$method, 
+        [Parameter(Mandatory=$true)][hashtable]$header, 
+        [hashtable]$body)
+    $bodyJSON = $body | ConvertTo-Json
+    $fullURI = $homeAssistantURI + $uri
+    try {
+        if($body){
+            $response = Invoke-RestMethod -Uri $fullURI -Method $method -Headers $header -body $bodyJSON
+        }else{
+            $response = Invoke-RestMethod -Uri $fullURI -Method $method -Headers $header 
         }
     }
-    if($command -eq "turnoff"){
-        $response = SendHomeAssistantCommand -command "checkState"
-        Write-Host "command is turn off. Checking state: TV says it is $($response.state)"
-        if($response.state -eq "on"){
-            Write-Host "TV is on. resending turn on command then waiting to recheck"
-            Invoke-RestMethod -Uri $fullURI -Method $method -Headers $headers -Body $body
-            Start-Sleep -Seconds 5
-            $retryCounter++
-            SendHomeAssistantCommand -command "turnoff"
-        }
+    catch {
+        Write-Output "Error: $response"
     }
+    return $reponse
 }
-
-
-if($action -eq "bigpicture"){
-    # Turn on Samsung Q90 TV
-    SendHomeAssistantCommand -command "turnon"
-    # Switch Samsung Q90 TV input to HDMI
-    SendHomeAssistantCommand -source "PC" -command "switchinput"
+function checkState{
+    $method = "GET"
+    $response = SendHomeAssistantCommand -uri $checkStateURI -method $method -header $header
+    return $response.state
+}
+function switchInput{
+    param($source)
+    $method = "POST"
+    $body = @{
+            "entity_id" = $entityID
+            "source" = $source
+        }
+    SendHomeAssistantCommand -uri $switchInputURI -method $method -header $header -body $body
+}
+function turnOn{
+    $method = "POST"
+    $body = @{
+            "entity_id" = $entityID
+        }
+    SendHomeAssistantCommand -uri $turnOnURI -method $method -header $header -body $body
+}
+function turnOff{
+    $method = "POST"
+    $body = @{
+            "entity_id" = $entityID
+        }
+    SendHomeAssistantCommand -uri $turnOffURI -method $method -header $header -body $body
+}
+function bigpicture{
     # Change Windows 11 monitor configuration
-    Start-Process -FilePath $multimonitortoolPath -ArgumentList "/loadconfig", "C:\Users\ken\Documents\MonitorConfigs\ExtendtoTV.cfg"
-    Start-Sleep -Seconds 2
-    # Launch Steam Big Picture Mode
-    Start-Process -FilePath "steam://open/bigpicture" -Wait
-}
-if($action -eq "desktop"){
-    # Exit Steam Big Picture Mode
-Start-Process -FilePath "steam://close/bigpicture" -Wait
-# Change Windows 11 monitor configuration
-Start-Process -FilePath $multimonitortoolPath -ArgumentList "/loadconfig", "C:\Users\ken\Documents\MonitorConfigs\desktoponly.cfg"
-# Switch Samsung Q90 TV input to HDMI
-SendHomeAssistantCommand -command "switchinput" -source "AVR_X2700H"
-# Turn off Samsung Q90 TV
-SendHomeAssistantCommand -command "turnoff"
+    Start-Process -FilePath $multimonitortoolPath -ArgumentList "/loadconfig", $tvMonitorConfig
+    Start-Sleep -Seconds 3
+    $counter = 0
+    if($counter -lt $retries){
+        while($checkState -eq "off"){
+            turnOn
+            Start-Sleep -Seconds 5
+            $counter++
+        }
+        # Switch Samsung Q90 TV input to HDMI
+        switchInput -source $PCsource
+        # Launch Steam Big Picture Mode
+        Start-Process -FilePath "steam://open/bigpicture" -Wait
     }
+    else{
+        Write-Host "Could not turn on TV"
+    }
+    
+    
+}
+function desktop{
+    # Exit Steam Big Picture Mode
+    Start-Process -FilePath "steam://close/bigpicture" -Wait
+    # Change Windows 11 monitor configuration
+    Start-Process -FilePath $multimonitortoolPath -ArgumentList "/loadconfig", $desktopMonitorConfig
+    # Switch Samsung Q90 TV input to HDMI
+    switchInput -source $TVsource
+    # Turn off Samsung Q90 TV
+    turnOff
+}
+if($action -eq "bigpicture"){
+    bigpicture
+}
+ 
+if($action -eq "desktop"){
+    desktop
+}  
