@@ -90,21 +90,26 @@ function turnOff{
 }
 
 function bigpicture{
+    # Exit Steam
+    Start-Process -FilePath "steam://Exit" -Wait
     # Change Windows 11 monitor configuration
     Start-Process -FilePath $multimonitortoolPath -ArgumentList "/loadconfig", $tvMonitorConfig
     #Turn on Samsung Q90 TV
     turnOn
     # Switch Samsung Q90 TV input to HDMI
     switchInput -source $PCsource
-    Start-Sleep -Seconds 1
-    # Launch Steam Big Picture Mode
+    # Exit Steam
     Start-Process -FilePath "steam://open/bigpicture" -Wait
 }
 function desktop{
-    # Exit Steam Big Picture Mode
-    Start-Process -FilePath "steam://close/bigpicture" -Wait
     # Change Windows 11 monitor configuration
     Start-Process -FilePath $multimonitortoolPath -ArgumentList "/loadconfig", $desktopMonitorConfig
+    # Exit Steam
+    Start-Process -FilePath "steam://Exit" -Wait
+    while(Get-Process "steam"){
+        Start-Sleep -seconds 1
+    }
+    Start-Process -FilePath "steam://"
     # Turn off Samsung Q90 TV
     turnOff
 
