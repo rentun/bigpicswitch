@@ -62,7 +62,13 @@ function turnOn{
     $body = @{
             "entity_id" = $entityID
         }
-    SendHomeAssistantCommand -uri $turnOnURI -method $method -header $header -body $body
+    $counter = 0
+    if($counter -lt $retries){
+        while($checkState -eq "off"){
+            SendHomeAssistantCommand -uri $turnOnURI -method $method -header $header -body $body
+            Start-Sleep -Seconds 5
+            $counter++
+        }
 }
 function turnOff{
     $method = "POST"
@@ -74,22 +80,15 @@ function turnOff{
 function bigpicture{
     # Change Windows 11 monitor configuration
     Start-Process -FilePath $multimonitortoolPath -ArgumentList "/loadconfig", $tvMonitorConfig
-    Start-Sleep -Seconds 3
-    $counter = 0
-    if($counter -lt $retries){
-        while($checkState -eq "off"){
-            turnOn
-            Start-Sleep -Seconds 5
-            $counter++
-        }
-        # Switch Samsung Q90 TV input to HDMI
-        switchInput -source $PCsource
-        # Launch Steam Big Picture Mode
-        Start-Process -FilePath "steam://open/bigpicture" -Wait
-    }
-    else{
-        Write-Host "Could not turn on TV"
-    }
+    #Turn on Samsung Q90 TV
+    turnOn
+    # Switch Samsung Q90 TV input to HDMI
+    switchInput -source $PCsource
+    Start-Sleep -Seconds 1
+    # Launch Steam Big Picture Mode
+    Start-Process -FilePath "steam://open/bigpicture" -Wait
+}
+
     
     
 }
